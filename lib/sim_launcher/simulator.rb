@@ -45,14 +45,31 @@ class Simulator
 
   end
 
+  def sdk_list
+    JSON.parse(`#{iphonesim_path} showallsimulators`)
+  end
+
+  def get_device_udid(sdk_version, device_family)
+    device = sdk_list.find do |device|
+      device["deviceType"] == device_family && device["version"] == sdk_version
+    end
+    device["udid"] if device
+  end
+
   def launch_ios_app(app_path, sdk_version, device_family, app_args = nil)
     if problem = SimLauncher.check_app_path( app_path )
       bangs = '!'*80
       raise "\n#{bangs}\nENCOUNTERED A PROBLEM WITH THE SPECIFIED APP PATH:\n\n#{problem}\n#{bangs}"
     end
+
     sdk_version ||= SdkDetector.new(self).latest_sdk_version
     args = ["--args"] + app_args.flatten if app_args
-    run_synchronous_command( :launch, app_path, '--sdk', sdk_version, '--family', device_family, '--exit', *args )
+
+    udid = get_device_udid(sdk_version, device_family)
+    if udid.nil?
+      raise "Could not find simulator to launch with sdk version #{sdk_version} and device family #{device_family}"
+    end
+    run_synchronous_command( :launch, app_path, '--udid', udid, '--exit', *args )
   end
 
   def launch_ipad_app( app_path, sdk )
@@ -80,7 +97,6 @@ class Simulator
   def run_synchronous_command( *args )
     args.compact!
     cmd = cmd_line_with_args( args )
-    puts "executing #{cmd}" if $DEBUG
     `#{cmd}`
   end
 
